@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    background: transparent;
+    cursor: crosshair;
+    user-select: none;
+  }
+
+  #overlay {
+    position: fixed;
+    inset: 0;
+    /* 어둡게 전체 덮기 */
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  /* 선택된 영역: 밝게 뚫기 */
+  #selection {
+    position: fixed;
+    border: 2px solid #00e5a0;
+    box-shadow:
+      0 0 0 2000px rgba(0, 0, 0, 0.45),
+      0 0 12px rgba(0, 229, 160, 0.6);
+    display: none;
+    pointer-events: none;
+  }
+
+  /* 크기 표시 */
+  #sizeLabel {
+    position: fixed;
+    background: #00e5a0;
+    color: #000;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    white-space: nowrap;
+  }
+
+  /* 안내 텍스트 */
+  #guide {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+  }
+  #guide p {
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    color: rgba(255,255,255,0.85);
+    line-height: 2;
+  }
+  #guide .key {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: #00e5a0;
+  }
+</style>
+</head>
+<body>
+
+<div id="overlay"></div>
+<div id="selection"></div>
+<div id="sizeLabel"></div>
+<div id="guide">
+  <p>드래그하여 OCR 영역 선택</p>
+  <p><span class="key">ESC</span> 취소</p>
+</div>
+
+<script>
+  const api = window.electronAPI;
+  const selEl = document.getElementById('selection');
+  const sizeLabel = document.getElementById('sizeLabel');
+  const guide = document.getElementById('guide');
+
+  let startX = 0, startY = 0;
+  let isDragging = false;
+
+  function getRect(x1, y1, x2, y2) {
+    return {
+      x: Math.min(x1, x2),
+      y: Math.min(y1, y2),
+      width: Math.abs(x2 - x1),
+      height: Math.abs(y2 - y1),
+    };
+  }
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    startX = e.clientX;
+    startY = e.clientY;
+    isDragging = true;
+    guide.style.display = 'none';
+    selEl.style.display = 'block';
+    sizeLabel.style.display = 'block';
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const r = getRect(startX, startY, e.clientX, e.clientY);
+
+    selEl.style.left = r.x + 'px';
+    selEl.style.top = r.y + 'px';
+    selEl.style.width = r.width + 'px';
+    selEl.style.height = r.height + 'px';
+
+    sizeLabel.textContent = `${r.width} × ${r.height}`;
+    // 라벨 위치: 선택 박스 오른쪽 하단 바깥
+    let lx = r.x + r.width + 6;
+    let ly = r.y + r.height + 6;
+    if (lx + 90 > window.innerWidth) lx = r.x - 96;
+    if (ly + 22 > window.innerHeight) ly = r.y - 28;
+    sizeLabel.style.left = lx + 'px';
+    sizeLabel.style.top = ly + 'px';
+  });
+
+  document.addEventListener('mouseup', async (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+
+    const r = getRect(startX, startY, e.clientX, e.clientY);
+
+    // 너무 작은 영역 무시
+    if (r.width < 10 || r.height < 10) {
+      await api.cancelOverlay();
+      return;
+    }
+
+    await api.areaSelected(r);
+  });
+
+  document.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') {
+      await api.cancelOverlay();
+    }
+  });
+</script>
+</body>
+</html>
